@@ -30,6 +30,7 @@ import debug_controller
 import gpiod
 import mqtt_controller
 import netscan_controller
+import throttle
 import tls_mirror_controller
 import wifi_controller
 try:
@@ -2790,7 +2791,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/ble/status":
             self._handle_ble_status()
         elif path.startswith("/firmware/"):
-            self._handle_firmware_download(path)
+            self._handle_firmware_download(path, parse_qs(parsed.query))
         elif path in ("/", "/index.html"):
             self._serve_ui()
         else:
@@ -4028,7 +4029,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     })
         self._send_json({"ok": True, "files": files})
 
-    def _handle_firmware_download(self, path):
+    def _handle_firmware_download(self, path, qs=None):
         # path = /firmware/<project>/<filename>
         parts = path.split("/")
         # ["", "firmware", project, filename]
@@ -4040,10 +4041,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if ".." in project or ".." in filename or "/" in project or "/" in filename:
             self._send_json({"error": "path traversal not allowed"}, 400)
             return
+        try:
+            rate = throttle.parse_rate((qs or {}).get("rate", [None])[0])
+        except ValueError as e:
+            self._send_json({"error": str(e)}, 400)
+            return
         fpath = os.path.join(FIRMWARE_DIR, project, filename)
         if not os.path.isfile(fpath):
             self._send_json({"error": "not found"}, 404)
             return
+        if rate:
+            log_activity(f"firmware {project}/{filename} served at {rate} B/s", "step")
         try:
             fsize = os.path.getsize(fpath)
             self.send_response(200)
@@ -4051,13 +4059,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", fsize)
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.end_headers()
+            start, sent, step = time.monotonic(), 0, throttle.chunk_size(rate)
             with open(fpath, "rb") as f:
                 while True:
-                    chunk = f.read(8192)
+                    chunk = f.read(step)
                     if not chunk:
                         break
                     self.wfile.write(chunk)
-        except BrokenPipeError:
+                    sent += len(chunk)
+                    wait = throttle.delay(start, sent, rate, time.monotonic())
+                    if wait:
+                        time.sleep(wait)
+        except (BrokenPipeError, ConnectionResetError):
             pass
 
     def _handle_firmware_upload(self):

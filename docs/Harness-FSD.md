@@ -1858,6 +1858,23 @@ http://$BENCH:8080/firmware/ios-keyboard/ios-keyboard.bin
 
 Path traversal is rejected (no `..` allowed in project or filename).
 
+**Paced serving** — `?rate=<bytes/s>` (integer 1000–10 000 000) serves the
+file at that rate, so an OTA stays in progress long enough for a test to act
+during it (a second request, the DUT's behaviour mid-transfer). The pacing is
+cumulative: after `n` bytes at least `n / rate` seconds have passed, in writes
+of at most 8 KiB about four times a second. Without `rate` the file is sent
+as fast as the link allows. A `rate` outside the range or not an integer
+answers 400 naming `rate` and sends no file. Downloads run on their own
+threads, so a paced download blocks nothing else.
+
+**Verification contract**
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-021 | A file of S bytes in the repository; GET it with `?rate=R` | 200, all S bytes, identical to the file; the download takes ≥ S/R − 1 s and ≤ S/R + 5 s | The whole file in under S/R − 1 s; a truncated or altered body |
+| FR-021 | GET with `?rate=10`, `?rate=fast` | 400 naming `rate` | Bytes of the file sent |
+| FR-021 | A paced download running; `GET /api/info` | Answered within 2 s | The API blocked until the download ends |
+
 **GET /api/firmware/list** response:
 ```json
 {
