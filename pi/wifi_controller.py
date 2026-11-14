@@ -913,8 +913,34 @@ def scan():
 # HTTP Relay
 # ---------------------------------------------------------------------------
 
-def http_relay(method, url, headers=None, body=None, timeout=10):
-    """Perform an HTTP request from the Pi. Returns dict with status, headers, body."""
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Hand a 3xx back to the caller instead of following it (FR-014)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def relay_opener(follow_redirects=True):
+    """The opener the relay uses: urllib's default, or one that stops at a 3xx."""
+    if follow_redirects:
+        return urllib.request.build_opener()
+    return urllib.request.build_opener(_NoRedirect)
+
+
+def parse_follow_redirects(value):
+    """`follow_redirects` from a request body: absent → True, else a JSON bool."""
+    if value is None:
+        return True
+    if not isinstance(value, bool):
+        raise ValueError("follow_redirects must be true or false")
+    return value
+
+
+def http_relay(method, url, headers=None, body=None, timeout=10, follow_redirects=True):
+    """Perform an HTTP request from the Pi. Returns dict with status, headers, body.
+
+    With follow_redirects False a 3xx is returned as received (status,
+    Location, body) — the only way to observe a captive portal's redirect."""
     _check_wifi_testing_mode()
     req_headers = headers or {}
     body_bytes = None
@@ -929,7 +955,7 @@ def http_relay(method, url, headers=None, body=None, timeout=10):
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with relay_opener(follow_redirects).open(req, timeout=timeout) as resp:
             resp_body = resp.read()
             resp_headers = dict(resp.getheaders())
             return {

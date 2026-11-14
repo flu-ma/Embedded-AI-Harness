@@ -3386,9 +3386,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         headers = body.get("headers")
         req_body = body.get("body")  # base64 encoded
         timeout = body.get("timeout", 10)
+        try:
+            follow = wifi_controller.parse_follow_redirects(body.get("follow_redirects"))
+        except ValueError as e:
+            self._send_json({"ok": False, "error": str(e)}, 400)
+            return
         log_activity(f"HTTP relay {method} {url}", "step")
         try:
-            result = wifi_controller.http_relay(method, url, headers, req_body, timeout)
+            result = wifi_controller.http_relay(method, url, headers, req_body, timeout,
+                                                follow_redirects=follow)
             log_activity(f"HTTP relay {method} {url} — {result.get('status', '?')}", "ok")
             self._send_json({"ok": True, **result})
         except Exception as e:

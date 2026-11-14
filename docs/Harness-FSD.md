@@ -1566,6 +1566,19 @@ WiFi side of the network:
 - Returns `{status, headers, body}`
 - Works in both AP mode (reaching devices at 192.168.4.x) and STA mode
   (reaching the external network)
+- `follow_redirects` (JSON bool, default `true`): with `false` a 3xx is
+  returned as received — its `status`, its headers including `Location`, and
+  its body — instead of the page it points to. A captive portal's redirect is
+  otherwise unobservable: the relay follows it and reports the portal page with
+  200. Any other value answers 400.
+
+**Verification contract**
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-014 | A URL answering 302 with `Location: L`; relay it with `follow_redirects: false` | `status` 302, `headers.Location` = L | The target of L fetched; status 200 |
+| FR-014 | The same URL, `follow_redirects` absent | The target of L, as before this field existed | A changed default |
+| FR-014 | `follow_redirects: "no"` | 400 naming the field | The request sent |
 
 ### FR-015 — Event System
 
@@ -4026,7 +4039,7 @@ AP and STA modes are mutually exclusive.
 | GET | `/api/wifi/ap_status` | `{"active", "ssid", "channel", "stations": [{"mac", "ip"}, ...]}` |
 | POST | `/api/wifi/sta_join` · `sta_leave` | Join / leave a network `{"ssid", "pass?"}` |
 | GET | `/api/wifi/scan` | Scan nearby WiFi networks |
-| POST | `/api/wifi/http` | HTTP relay through wlan0 `{"method", "url", "headers?", "body?"}` |
+| POST | `/api/wifi/http` | HTTP relay through wlan0 `{"method", "url", "headers?", "body?", "follow_redirects?"}` |
 | GET | `/api/wifi/events` | Long-poll station events `?timeout=` |
 | GET | `/api/wifi/ping` | Version and uptime. Answers in either mode, so it is the reachability probe |
 | POST | `/api/wifi/lease_event` | dnsmasq lease hook `{"action", "mac", "ip", "hostname"}` — called by the Pi, not by clients |
