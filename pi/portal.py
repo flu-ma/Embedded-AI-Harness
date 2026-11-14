@@ -30,6 +30,7 @@ import debug_controller
 import gpiod
 import mqtt_controller
 import netscan_controller
+import station_ping
 import tls_mirror_controller
 import wifi_controller
 try:
@@ -2732,6 +2733,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_get_info()
         elif path == "/api/wifi/ping":
             self._handle_wifi_ping()
+        elif path == "/api/wifi/station_ping/status":
+            self._send_json({"ok": True, **station_ping.runner.status()})
         elif path == "/api/wifi/mode":
             self._handle_wifi_mode_get()
         elif path == "/api/wifi/ap_status":
@@ -2847,6 +2850,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_wifi_sta_leave()
         elif path == "/api/wifi/http":
             self._handle_wifi_http()
+        elif path == "/api/wifi/station_ping/start":
+            self._handle_station_ping_start()
+        elif path == "/api/wifi/station_ping/stop":
+            station_ping.runner.stop()
+            self._send_json({"ok": True, **station_ping.runner.status()})
         elif path == "/api/wifi/lease_event":
             self._handle_wifi_lease_event()
         elif path == "/api/human-interaction":
@@ -3394,6 +3402,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             log_activity(f"HTTP relay failed: {e}", "error")
             self._send_json({"ok": False, "error": str(e)})
+
+    def _handle_station_ping_start(self):
+        body = self._read_json() or {}
+        try:
+            host, iv, du = station_ping.validate(body)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": str(e)}, 400)
+            return
+        try:
+            job = station_ping.runner.start(wifi_controller.WLAN_IF, host, iv, du)
+        except RuntimeError as e:
+            self._send_json({"ok": False, "error": str(e)}, 409)
+            return
+        log_activity(f"station ping {host} every {iv} ms for {du} s", "step")
+        self._send_json({"ok": True, "running": True, **job})
 
     def _handle_wifi_scan(self):
         log_activity("WiFi scanning...", "step")

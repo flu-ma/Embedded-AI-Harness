@@ -1567,6 +1567,34 @@ WiFi side of the network:
 - Works in both AP mode (reaching devices at 192.168.4.x) and STA mode
   (reaching the external network)
 
+### FR-041 — Station Ping
+
+Pings a host from the bench station (wlan0) at a fixed interval for a fixed
+time and reports the losses, above all the **longest run of consecutive lost
+replies** — what a client of a DUT's AP experiences while the DUT uses its
+radio for something else (a station attempt, a scan). Backed by
+`station_ping.py`; one run at a time, in the background, so a test can watch
+the DUT's log meanwhile.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/wifi/station_ping/start | `{host, interval_ms?, duration_s?}` — IPv4 host; interval 20–1000 ms (default 100); duration 1–600 s (default 60). 400 naming the field otherwise; 409 while a run is going |
+| GET | /api/wifi/station_ping/status | `{running, host, interval_ms, sent, received, lost, longest_loss_run, longest_loss_ms}` — while running, `sent` counts requests up to now |
+| POST | /api/wifi/station_ping/stop | End the run early; answers the status |
+
+Requests are numbered from 1; a request without a reply within 1 s is lost;
+`longest_loss_ms` = `longest_loss_run` × `interval_ms`. After the run, an
+`error` field carries ping's last lines if it could not run at all (no route,
+interface down).
+
+**Verification contract**
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-041 | Station joined to an AP whose gateway answers ping; start 100 ms × 10 s | after 10 s: `running` false, `sent` 100, `received` ≥ 95, `longest_loss_run` small | `sent` other than 100; losses reported for answered requests |
+| FR-041 | As above, the AP stopped for 3 s mid-run | `longest_loss_ms` ≈ 3000 (± 1000) | the outage hidden; the run aborted |
+| FR-041 | `interval_ms: 10`, `host: "x"`; a second start while running | 400 naming the field; 409 | a run started |
+
 ### FR-015 — Event System
 
 - Events: `STA_CONNECT` (mac, ip, hostname) and `STA_DISCONNECT` (mac)
