@@ -225,9 +225,12 @@ class TestbenchDriver:
 
     def wifi_http(self, url: str, method: str = "GET",
                   headers: Optional[dict] = None, body: str = None,
-                  timeout: int = 8) -> dict:
-        """Relay an HTTP request through the Pi's radio to a device on its net."""
+                  timeout: int = 8, follow_redirects: bool = True) -> dict:
+        """Relay an HTTP request through the Pi's radio to a device on its net.
+        follow_redirects=False returns a 3xx as received (FR-014)."""
         args = {"method": method, "url": url, "timeout": timeout}
+        if not follow_redirects:
+            args["follow_redirects"] = False
         if headers:
             args["headers"] = headers
         if body is not None:
