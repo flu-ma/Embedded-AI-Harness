@@ -49,3 +49,15 @@ def test_relay_round_trip():
     assert fw.status()[0]["connections"] == 1
     assert fw.stop(8187)[0]["listen_port"] == 8187 and fw.status() == []
     echo.close()
+
+
+def test_replace_and_restart_same_port():
+    fw = pf.Forwards()
+    a = fw.start("127.0.0.1", 9, 8188)
+    assert fw.start("127.0.0.1", 9, 8188) == a                  # identical: kept
+    b = fw.start("127.0.0.1", 10, 8188)                         # other target: replaced, port re-bound
+    assert b["target_port"] == 10 and len(fw.status()) == 1
+    fw.stop()
+    c = fw.start("127.0.0.1", 9, 8188)                          # stopped port re-bound at once
+    assert c["listen_port"] == 8188
+    fw.stop()
