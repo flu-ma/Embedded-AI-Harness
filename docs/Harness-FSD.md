@@ -673,9 +673,10 @@ request says `after=no-reset`; then no `POST /api/serial/reset` is needed
 afterwards.
 
 **FR-042 — Flash without booting.** `after=no-reset` leaves the chip in the
-ROM downloader after the write, so the image's first boot is the next
-`POST /api/serial/reset`, whose response carries that boot's log from its
-first line. Without it, the first boot happens while the serial capture is
+ROM downloader after the write, and the slot's serial proxy stays stopped
+(opening the port toggles DTR/RTS, which boots the chip), so the image's
+first boot is the next `POST /api/serial/reset`, whose response carries that
+boot's log from its first line; the reset restarts the proxy. Without it, the first boot happens while the serial capture is
 restarting after the flash, and its early lines are lost — which hides
 anything the image does only once (e.g. repairing corrupt NVS).
 

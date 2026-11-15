@@ -2043,10 +2043,14 @@ def flash_device(slot: dict, files: dict, esptool_args: list[str],
         error = f"flash failed: {e}"
     finally:
         # Restart the proxy on the same devnode (DTR/RTS reset doesn't cause
-        # USB re-enumeration — same handling as serial_reset).
-        time.sleep(NATIVE_USB_BOOT_DELAY_S)
+        # USB re-enumeration — same handling as serial_reset). After a
+        # no-reset flash it stays stopped (FR-042): opening the port boots the
+        # chip; the next POST /api/serial/reset boots it and restarts the proxy.
+        stay = flash_opts.stays_in_bootloader(esptool_args)
+        if not stay:
+            time.sleep(NATIVE_USB_BOOT_DELAY_S)
         with slot["_lock"]:
-            if was_running and not slot.get("running"):
+            if was_running and not slot.get("running") and not stay:
                 start_proxy(slot)
             if slot["state"] == STATE_RESETTING:
                 slot["state"] = STATE_IDLE if slot["present"] else STATE_ABSENT
