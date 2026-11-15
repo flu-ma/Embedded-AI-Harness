@@ -79,7 +79,12 @@ class Forward:
         self._srv.close()
 
     def stop(self) -> None:
+        """Close the listening socket now, so the port can be bound again at once."""
         self._stop.set()
+        try:
+            self._srv.close()
+        except OSError:
+            pass
 
     def status(self) -> dict:
         return {"listen_port": self.listen_port, "target_ip": self.target[0],
@@ -93,9 +98,11 @@ class Forwards:
 
     def start(self, target_ip: str, target_port: int, listen_port: int) -> dict:
         with self._lock:
-            old = self._by_port.pop(listen_port, None)
+            old = self._by_port.get(listen_port)
+            if old and old.target == (target_ip, target_port):
+                return old.status()                       # same forward: keep it
             if old:
-                old.stop()
+                self._by_port.pop(listen_port).stop()
             f = Forward(target_ip, target_port, listen_port)
             self._by_port[listen_port] = f
             return f.status()
