@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 
 import debug_controller
 import flash_opts
+import multipart_part
 import gpiod
 import mqtt_controller
 import netscan_controller
@@ -3639,18 +3640,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         fields, files = {}, []
         for part in body.split(b"--" + boundary.encode()):
-            part = part.strip()
-            if not part or part == b"--":
+            split = multipart_part.split_part(part)   # content byte-exact (no .strip())
+            if split is None:
                 continue
-            if b"\r\n\r\n" in part:
-                header_section, content = part.split(b"\r\n\r\n", 1)
-            elif b"\n\n" in part:
-                header_section, content = part.split(b"\n\n", 1)
-            else:
-                continue
-            if content.endswith(b"\r\n"):
-                content = content[:-2]
-            headers_text = header_section.decode("utf-8", errors="replace")
+            headers_text, content = split
             name = filename = None
             for token in headers_text.replace("\r", "").split("\n"):
                 if "content-disposition" in token.lower():
@@ -4185,18 +4178,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         file_data = None
         file_name = None
         for part in parts_raw:
-            part = part.strip()
-            if not part or part == b"--":
+            split = multipart_part.split_part(part)   # content byte-exact (no .strip())
+            if split is None:
                 continue
-            if b"\r\n\r\n" in part:
-                header_section, content = part.split(b"\r\n\r\n", 1)
-            elif b"\n\n" in part:
-                header_section, content = part.split(b"\n\n", 1)
-            else:
-                continue
-            headers_text = header_section.decode("utf-8", errors="replace")
-            if content.endswith(b"\r\n"):
-                content = content[:-2]
+            headers_text, content = split
             if 'name="project"' in headers_text:
                 project = content.decode("utf-8").strip()
             elif 'name="file"' in headers_text:
@@ -4268,18 +4253,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         flash_args_text: str | None = None
 
         for part in parts_raw:
-            part = part.strip()
-            if not part or part == b"--":
+            split = multipart_part.split_part(part)   # content byte-exact (no .strip())
+            if split is None:
                 continue
-            if b"\r\n\r\n" in part:
-                header_section, content = part.split(b"\r\n\r\n", 1)
-            elif b"\n\n" in part:
-                header_section, content = part.split(b"\n\n", 1)
-            else:
-                continue
-            headers_text = header_section.decode("utf-8", errors="replace")
-            if content.endswith(b"\r\n"):
-                content = content[:-2]
+            headers_text, content = split
             name = None
             filename = None
             for h in headers_text.split("\n"):
@@ -4537,18 +4514,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         fields: dict[str, str] = {}
         firmware: bytes | None = None
         for part in parts_raw:
-            part = part.strip()
-            if not part or part == b"--":
+            split = multipart_part.split_part(part)   # content byte-exact (no .strip())
+            if split is None:
                 continue
-            if b"\r\n\r\n" in part:
-                header_section, content = part.split(b"\r\n\r\n", 1)
-            elif b"\n\n" in part:
-                header_section, content = part.split(b"\n\n", 1)
-            else:
-                continue
-            if content.endswith(b"\r\n"):
-                content = content[:-2]
-            headers_text = header_section.decode("utf-8", errors="replace")
+            headers_text, content = split
             name = None
             is_file = False
             for h in headers_text.split("\n"):
