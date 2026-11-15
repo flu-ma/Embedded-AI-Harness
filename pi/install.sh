@@ -144,6 +144,7 @@ cp "$SCRIPT_DIR/station_ping.py"           /usr/local/bin/station_ping.py
 cp "$SCRIPT_DIR/flash_opts.py"              /usr/local/bin/flash_opts.py
 cp "$SCRIPT_DIR/http_abort.py"              /usr/local/bin/http_abort.py
 cp "$SCRIPT_DIR/multipart_part.py"          /usr/local/bin/multipart_part.py
+cp "$SCRIPT_DIR/port_forward.py"            /usr/local/bin/port_forward.py
 cp "$SCRIPT_DIR/tls_mirror_controller.py"   /usr/local/bin/tls_mirror_controller.py
 cp "$SCRIPT_DIR/ntp_controller.py"          /usr/local/bin/ntp_controller.py
 cp "$SCRIPT_DIR/sniffer.py"                 /usr/local/bin/sniffer.py

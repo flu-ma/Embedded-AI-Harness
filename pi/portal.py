@@ -36,6 +36,7 @@ import ntp_controller
 import throttle
 import station_ping
 import http_abort
+import port_forward
 import tls_mirror_controller
 import wifi_controller
 try:
@@ -2745,6 +2746,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_wifi_ping()
         elif path == "/api/wifi/station_ping/status":
             self._send_json({"ok": True, **station_ping.runner.status()})
+        elif path == "/api/forward/status":
+            self._send_json({"ok": True, "forwards": port_forward.forwards.status()})
         elif path == "/api/wifi/mode":
             self._handle_wifi_mode_get()
         elif path == "/api/wifi/ap_status":
@@ -2879,6 +2882,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json({"ok": True, **station_ping.runner.status()})
         elif path == "/api/wifi/http_abort":
             self._handle_wifi_http_abort()
+        elif path == "/api/forward/start":
+            self._handle_forward_start()
+        elif path == "/api/forward/stop":
+            body = self._read_json() or {}
+            port = body.get("listen_port")
+            self._send_json({"ok": True, "stopped": port_forward.forwards.stop(int(port) if port is not None else None)})
         elif path == "/api/wifi/lease_event":
             self._handle_wifi_lease_event()
         elif path == "/api/human-interaction":
@@ -3483,6 +3492,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except OSError as e:
             log_activity(f"HTTP cut-off failed: {e}", "error")
             self._send_json({"ok": False, "error": str(e)})
+    def _handle_forward_start(self):
+        """FR-044: forward a bench LAN port (8100–8199) to a device on the bench network."""
+        body = self._read_json() or {}
+        try:
+            ip, tport, lport = port_forward.validate(body)
+            res = port_forward.forwards.start(ip, tport, lport)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": str(e)}, 400)
+            return
+        except OSError as e:
+            self._send_json({"ok": False, "error": f"cannot listen on {body.get('listen_port')}: {e}"}, 409)
+            return
+        log_activity(f"forward :{lport} → {ip}:{tport}", "step")
+        self._send_json({"ok": True, **res})
 
     def _handle_wifi_scan(self):
         log_activity("WiFi scanning...", "step")

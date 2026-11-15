@@ -1642,6 +1642,27 @@ connection is then closed — what a DUT sees when a client dies mid-upload
 | FR-043 | A listener on the station network; body 1000 B, `abort_after` 500 | the listener receives the head with `Content-Length: 1000`, exactly 500 body bytes, then EOF | more than 500 bytes; the connection left open | bench |
 | FR-043 | `abort_after` 1000 for a 1000 B body | 400 naming `abort_after`; nothing sent | a full upload |
 
+### FR-044 — Port Forward to the Bench Network
+
+Forwards a TCP port on the bench's LAN address to a device on the bench's
+WiFi network (192.168.4.x), so a browser or script on the LAN can reach a DUT
+only the bench can see — e.g. a headless browser driving the DUT's web pages.
+Bytes are copied both ways; nothing is parsed. Backed by `port_forward.py`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/forward/start | `{target_ip, target_port?, listen_port?}` — private IPv4 target, port default 80; listen port 8100–8199 (default 8100). Replaces a forward already on that port. 400 naming the field; 409 when the port cannot be bound |
+| POST | /api/forward/stop | `{listen_port?}` — one forward, or all when omitted |
+| GET | /api/forward/status | `{forwards: [{listen_port, target_ip, target_port, connections}]}` |
+
+**Verification contract**
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-044 | A DUT serving HTTP on 192.168.4.x:80; start a forward on 8100; GET `http://<bench>:8100/` from the LAN | the DUT's response, byte-identical to the relay's `/api/wifi/http` answer | a different body; the forward reaching a non-private address |
+| FR-044 | `listen_port: 8080`; `target_ip: 8.8.8.8` | 400 naming the field | a listener started |
+| FR-044 | stop | the port refuses connections | the forward left running |
+
 ### FR-015 — Event System
 
 - Events: `STA_CONNECT` (mac, ip, hostname) and `STA_DISCONNECT` (mac)
