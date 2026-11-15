@@ -34,6 +34,7 @@ import netscan_controller
 import ntp_controller
 import throttle
 import station_ping
+import http_abort
 import tls_mirror_controller
 import wifi_controller
 try:
@@ -2875,6 +2876,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/wifi/station_ping/stop":
             station_ping.runner.stop()
             self._send_json({"ok": True, **station_ping.runner.status()})
+        elif path == "/api/wifi/http_abort":
+            self._handle_wifi_http_abort()
         elif path == "/api/wifi/lease_event":
             self._handle_wifi_lease_event()
         elif path == "/api/human-interaction":
@@ -3454,6 +3457,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         log_activity(f"station ping {host} every {iv} ms for {du} s", "step")
         self._send_json({"ok": True, "running": True, **job})
+    def _handle_wifi_http_abort(self):
+        """FR-043: send a request whose body is cut off after abort_after bytes."""
+        body = self._read_json()
+        if body is None:
+            self._send_json({"ok": False, "error": "empty body"}, 400)
+            return
+        try:
+            data = base64.b64decode(body.get("body") or "")
+            cut = int(body.get("abort_after", -1))
+            pause = int(body.get("pause_ms", 500))
+            http_abort.check_cut(len(data), cut)
+            http_abort.request_head(body.get("method", "POST"), body.get("url") or "", body.get("headers"), len(data))
+        except (ValueError, TypeError) as e:
+            self._send_json({"ok": False, "error": str(e)}, 400)
+            return
+        url = body["url"]
+        log_activity(f"HTTP cut-off {url}: {cut} of {len(data)} bytes", "step")
+        try:
+            res = http_abort.send_cut(body.get("method", "POST"), url, body.get("headers"), data, cut, pause,
+                                      float(body.get("timeout", 30)))
+            log_activity(f"HTTP cut-off {url} — closed after {res['sent']} bytes", "ok")
+            self._send_json({"ok": True, **res})
+        except OSError as e:
+            log_activity(f"HTTP cut-off failed: {e}", "error")
+            self._send_json({"ok": False, "error": str(e)})
 
     def _handle_wifi_scan(self):
         log_activity("WiFi scanning...", "step")

@@ -1624,6 +1624,24 @@ interface down).
 | FR-041 | As above, the AP stopped for 3 s mid-run | `longest_loss_ms` ≈ 3000 (± 1000) | the outage hidden; the run aborted |
 | FR-041 | `interval_ms: 10`, `host: "x"`; a second start while running | 400 naming the field; 409 | a run started |
 
+### FR-043 — Cut-off HTTP Upload
+
+Sends an HTTP request from the bench station whose head announces the whole
+body (`Content-Length`) but whose body stops after `abort_after` bytes; the
+connection is then closed — what a DUT sees when a client dies mid-upload
+(an interrupted OTA). Backed by `http_abort.py`; plain `http://` only.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/wifi/http_abort | `{url, method?, headers?, body (base64), abort_after, pause_ms?, timeout?}` — sends the head and `body[:abort_after]`, waits `pause_ms` (default 500), closes. `{ok, sent, of, closed_after_ms}`; 400 when `abort_after` is not in 0…len(body)−1 or a header holds CR/LF |
+
+**Verification contract**
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-043 | A listener on the station network; body 1000 B, `abort_after` 500 | the listener receives the head with `Content-Length: 1000`, exactly 500 body bytes, then EOF | more than 500 bytes; the connection left open | bench |
+| FR-043 | `abort_after` 1000 for a 1000 B body | 400 naming `abort_after`; nothing sent | a full upload |
+
 ### FR-015 — Event System
 
 - Events: `STA_CONNECT` (mac, ip, hostname) and `STA_DISCONNECT` (mac)
