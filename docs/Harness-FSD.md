@@ -646,6 +646,7 @@ debug session is active** on the slot (stop debug first).
 | `chip` | field | esptool chip, default `auto` |
 | `baud` | field | Flash baud, default `921600` |
 | `erase` | field | `1`/`true` to erase-all first (optional) |
+| `after` | field | `hard-reset` (default) or `no-reset` — FR-042 (optional) |
 | `bin@0x1000`, `bin@0x8000`, … | file | One file part per flash image. The part name is **`bin@` followed by the hex offset**; a part named with the bare offset is stored but never flashed |
 | `flash_args` | file | ESP-IDF's `build/flash_args`. Offsets then come from it, and each image's part name must equal its basename |
 
@@ -667,8 +668,21 @@ curl -X POST http://$BENCH:8080/api/flash \
   -F 'bin@0x10000=@.pio/build/<env>/firmware.bin'
 ```
 
-The portal fixes `--before default_reset --after hard_reset`; the request
-carries no reset flags. No `POST /api/serial/reset` is needed afterwards.
+The portal uses `--before default_reset --after hard_reset` unless the
+request says `after=no-reset`; then no `POST /api/serial/reset` is needed
+afterwards.
+
+**FR-042 — Flash without booting.** `after=no-reset` leaves the chip in the
+ROM downloader after the write, so the image's first boot is the next
+`POST /api/serial/reset`, whose response carries that boot's log from its
+first line. Without it, the first boot happens while the serial capture is
+restarting after the flash, and its early lines are lost — which hides
+anything the image does only once (e.g. repairing corrupt NVS).
+
+| ID | Precondition · stimulus | Expected observation | Must NOT happen | Tier |
+|---|---|---|---|---|
+| FR-042 | Flash an image with `after=no-reset`; then `POST /api/serial/reset` | the reset's output starts with the ROM boot banner and contains the app's first log lines | the image booted before the reset (its lines in the serial buffer before it) |
+| FR-042 | `after=soft-reset` | 400 naming `after`; nothing flashed | esptool run |
 
 #### 6.7.1a Reading flash back via `POST /api/flash/read`
 

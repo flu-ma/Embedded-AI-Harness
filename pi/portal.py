@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import debug_controller
+import flash_opts
 import gpiod
 import mqtt_controller
 import netscan_controller
@@ -4198,6 +4199,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
           flash_freq — 40m/80m/... (default "40m", overridden by flash_args)
           flash_size — 4MB/keep/... (default "keep", overridden by flash_args)
           erase      — "1"/"true" to erase whole flash before write (default off)
+          after      — "hard-reset" (default) or "no-reset": leave the chip in
+                       the ROM downloader; its next reset is the first boot (FR-042)
 
         Files (one of):
           • A `flash_args` text part (esptool's @flash_args format) plus the
@@ -4296,6 +4299,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         flash_freq = fields.get("flash_freq", "40m")
         flash_size = fields.get("flash_size", "keep")
         erase = fields.get("erase", "").lower() in ("1", "true", "yes", "on")
+        try:
+            reset_args = flash_opts.reset_args(fields.get("after"))
+        except ValueError as exc:
+            self._send_json({"ok": False, "error": str(exc)}, 400)
+            return
 
         # Resolve offset/file pairs from flash_args (if any) and bin@... parts.
         flash_pairs: list[tuple[str, str]] = []
@@ -4332,12 +4340,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json({"ok": False, "error": "no binaries to flash"}, 400)
             return
 
-        base_args = [
-            "--chip", chip,
-            "--baud", baud,
-            "--before", "default-reset",
-            "--after", "hard-reset",
-        ]
+        base_args = ["--chip", chip, "--baud", baud] + reset_args
         write_args = [
             "write-flash",
             "--flash-mode", flash_mode,
