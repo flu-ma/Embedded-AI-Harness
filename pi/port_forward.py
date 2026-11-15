@@ -82,6 +82,10 @@ class Forward:
         """Close the listening socket now, so the port can be bound again at once."""
         self._stop.set()
         try:
+            self._srv.shutdown(socket.SHUT_RDWR)          # wakes the thread blocked in accept()
+        except OSError:
+            pass
+        try:
             self._srv.close()
         except OSError:
             pass
