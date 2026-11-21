@@ -1755,11 +1755,19 @@ Drive Pi GPIO pins from test scripts to control DUT hardware signals — for
 example, holding DUT GPIO 2 low during boot to trigger captive portal mode
 without requiring the rapid-reset approach or physical button presses.
 
-**Pin allowlist:** Only these Pi GPIO pins may be controlled:
+**Pin numbering:** `pin` is always a Raspberry Pi BCM number, naming the
+40-pin header position where a Raspberry Pi has that GPIO (BCM 17 = pin 11 =
+EN, BCM 18 = pin 12 = BOOT). On other host boards the portal maps it to the
+SoC line on the same header pin (`pi/gpio_map.py`); the board is detected at
+start-up and logged as `[gpio] board <name>: pins [...]`.
 
-```
-{5, 6, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}
-```
+**Pin allowlist:** Only these BCM pins may be controlled:
+
+| Host board | Allowed BCM pins |
+|---|---|
+| Raspberry Pi | `{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}` |
+| Orange Pi Zero 4 | `{17, 18, 22, 23, 25, 27}` (BCM 17 → PB0, 18 → PD1, 22 → PE11, 23 → PL2, 25 → PD2, 27 → PB1) |
+| any other board | none — every request returns 400 until a table is added |
 
 Requests for pins outside this set return HTTP 400.
 
