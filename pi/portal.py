@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 
 import debug_controller
 import gpiod
+import gpio_map
 import mqtt_controller
 import netscan_controller
 import tls_mirror_controller
@@ -113,10 +114,14 @@ _test_session = None  # dict or None; see _handle_test_update for schema
 
 # GPIO control — drive Pi GPIO pins from test scripts (e.g. hold DUT GPIO low)
 _gpio_lock = threading.Lock()
-_gpio_chip = None       # gpiod.Chip, opened lazily
+_gpio_chips = {}        # chip path -> gpiod.Chip, opened lazily
 _gpio_requests = {}     # pin -> gpiod.LineRequest
+_gpio_offsets = {}      # pin -> line offset within its chip
+_gpio_map = gpio_map.GpioMap(gpio_map.detect_board())
 _gpio_directions = {}   # pin -> "output" | "input"
-GPIO_ALLOWED = {16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}  # BCM GPIOs safe for DUT control
+GPIO_ALLOWED = _gpio_map.allowed  # BCM numbers safe for DUT control on this board (gpio_map.py)
+print(f"[gpio] board {_gpio_map.board}: pins {sorted(GPIO_ALLOWED)}"
+      + ("" if _gpio_map.supported else " (unknown board: no GPIO)"), flush=True)
 # Reserved: GPIO 2/3 = I2C (Si5351), GPIO 5/6 = GPCLK, GPIO 6/12/13 = PE4302 LE/CLK/DATA
 
 # Unified signal generator (Si5351 / PE4302 with GPCLK fallback)
@@ -161,19 +166,21 @@ SERIAL_BUF_MAXLEN = 1000
 
 def _gpio_set(pin, value):
     """Set a GPIO pin: value=0 (low), 1 (high), or "z" (input with pull-up)."""
-    global _gpio_chip
+    path, offset = _gpio_map.resolve(pin)
     with _gpio_lock:
-        if _gpio_chip is None:
-            _gpio_chip = gpiod.Chip("/dev/gpiochip0")
+        chip = _gpio_chips.get(path)
+        if chip is None:
+            chip = _gpio_chips[path] = gpiod.Chip(path)
+        _gpio_offsets[pin] = offset
 
         if value == "z":
             # Switch to input with pull-up (not floating)
             if pin in _gpio_requests:
                 _gpio_requests[pin].release()
                 del _gpio_requests[pin]
-            _gpio_requests[pin] = _gpio_chip.request_lines(
+            _gpio_requests[pin] = chip.request_lines(
                 consumer="serial-portal",
-                config={pin: gpiod.LineSettings(
+                config={offset: gpiod.LineSettings(
                     direction=gpiod.line.Direction.INPUT,
                     bias=gpiod.line.Bias.PULL_UP,
                 )},
@@ -188,15 +195,15 @@ def _gpio_set(pin, value):
             if pin in _gpio_requests:
                 _gpio_requests[pin].release()
                 del _gpio_requests[pin]
-            _gpio_requests[pin] = _gpio_chip.request_lines(
+            _gpio_requests[pin] = chip.request_lines(
                 consumer="serial-portal",
-                config={pin: gpiod.LineSettings(
+                config={offset: gpiod.LineSettings(
                     direction=gpiod.line.Direction.OUTPUT,
                     output_value=gval,
                 )},
             )
         else:
-            _gpio_requests[pin].set_value(pin, gval)
+            _gpio_requests[pin].set_value(offset, gval)
         _gpio_directions[pin] = "output"
 
 
@@ -3963,7 +3970,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with _gpio_lock:
             for pin, req in _gpio_requests.items():
                 try:
-                    val = req.get_value(pin)
+                    val = req.get_value(_gpio_offsets[pin])
                     # Track direction from our own state
                     direction = _gpio_directions.get(pin, "unknown")
                     pins[str(pin)] = {"direction": direction, "value": val.value}
